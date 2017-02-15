@@ -27,6 +27,13 @@ static char * TYPE_ROOM = "room";
 static char * TYPE_CORRIDOR = "corridor";
 static char * TYPE_ROCK = "rock";
 
+struct Monster {
+    uint8_t x;
+    uint8_t y;
+    uint8_t decimal_type;
+    uint8_t speed;
+};
+
 typedef struct {
     int tunneling_distance;
     int non_tunneling_distance;
@@ -34,6 +41,9 @@ typedef struct {
     char * type;
     uint8_t x;
     uint8_t y;
+    uint8_t has_player;
+    uint8_t has_monster;
+    struct Monster monster;
 } Board_Cell;
 
 typedef struct {
@@ -48,15 +58,10 @@ struct Room {
     uint8_t end_y;
 };
 
-struct Monster {
-    uint8_t x;
-    uint8_t y;
-    uint8_t decimal_type;
-    uint8_t speed;
-};
-
 Board_Cell board[HEIGHT][WIDTH];
+struct Coordinate placeable_areas[HEIGHT * WIDTH];
 struct Room * rooms;
+struct Monster * monsters;
 struct Coordinate player;
 char * RLG_DIRECTORY;
 
@@ -67,6 +72,7 @@ int NUMBER_OF_ROOMS = MIN_NUMBER_OF_ROOMS;
 int MAX_ROOM_WIDTH = DEFAULT_MAX_ROOM_WIDTH;
 int MAX_ROOM_HEIGHT = DEFAULT_MAX_ROOM_HEIGHT;
 int NUMBER_OF_MONSTERS = DEFAULT_NUMBER_OF_MONSTERS;
+int NUMBER_OF_PLACEABLE_AREAS = 0;
 
 void print_usage();
 void make_rlg_directory();
@@ -77,6 +83,7 @@ void initialize_immutable_rock();
 void load_board();
 void save_board();
 void place_player();
+void set_placeable_areas();
 void set_tunneling_distance_to_player();
 void set_non_tunneling_distance_to_player();
 void generate_monsters();
@@ -163,13 +170,15 @@ int main(int argc, char *args[]) {
         dig_cooridors();
     }
     place_player();
+    set_placeable_areas();
     set_non_tunneling_distance_to_player();
     set_tunneling_distance_to_player();
+    generate_monsters();
     printf("Player location: (%d, %d) (x, y)\n", player.x, player.y);
 
     print_board();
-    print_non_tunneling_board();
-    print_tunneling_board();
+    //print_non_tunneling_board();
+    //print_tunneling_board();
 
     if (DO_SAVE) {
         save_board();
@@ -271,6 +280,8 @@ void load_board() {
         fread(&num, 1, 1, fp);
         Board_Cell cell;
         cell.hardness = num;
+        cell.has_monster = 0;
+        cell.has_player = 0;
         if (num == 0) {
             cell.type = TYPE_CORRIDOR;
         }
@@ -321,7 +332,7 @@ void print_usage() {
 int random_int(int min_num, int max_num, int add_to_seed) {
     int seed = time(NULL);
     if (add_to_seed) {
-        seed += add_to_seed * 10;
+        seed += add_to_seed;
     }
     max_num ++;
     int delta = max_num - min_num;
@@ -333,6 +344,8 @@ void initialize_board() {
     Board_Cell cell;
     cell.type = TYPE_ROCK;
     cell.hardness = ROCK;
+    cell.has_monster = 0;
+    cell.has_player = 0;
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
             cell.x = x;
@@ -351,6 +364,8 @@ void initialize_immutable_rock() {
     Board_Cell cell;
     cell.type = TYPE_ROCK;
     cell.hardness = IMMUTABLE_ROCK;
+    cell.has_monster = 0;
+    cell.has_player = 0;
     for (y = 0; y < HEIGHT; y++) {
         cell.y = y;
         cell.x = 0;
@@ -375,6 +390,21 @@ void place_player() {
         player.x = x;
         player.y = y;
 
+    }
+}
+
+void set_placeable_areas() {
+    for (int y = 0; y < HEIGHT; y++) {
+        for (int x = 0; x < WIDTH; x++) {
+            Board_Cell cell = board[y][x];
+            if (cell.hardness == 0 && cell.x != player.x && cell.y != player.y) {
+                struct Coordinate coord;
+                coord.x = cell.x;
+                coord.y = cell.y;
+                placeable_areas[NUMBER_OF_PLACEABLE_AREAS] = coord;
+                NUMBER_OF_PLACEABLE_AREAS++;
+            }
+        }
     }
 }
 
@@ -586,6 +616,40 @@ void set_non_tunneling_distance_to_player() {
         }
     }
 }
+
+struct Coordinate get_random_board_location(int seed) {
+    int index = random_int(0, NUMBER_OF_PLACEABLE_AREAS, seed);
+    return placeable_areas[index];
+}
+
+void generate_monsters() {
+    monsters = malloc(sizeof(struct Monster) * NUMBER_OF_MONSTERS);
+    for (int i = 0; i < NUMBER_OF_MONSTERS; i++) {
+        struct Monster m;
+        struct Coordinate coordinate;
+        while (1) {
+            coordinate = get_random_board_location(i);
+            int is_new = 1;
+            for (int j = 0; j < i; j++) {
+                if (monsters[j].x == coordinate.x && monsters[j].y == coordinate.y && monsters[j].x == player.x && monsters[j].y == player.y) {
+                    is_new = 0;
+                    break;
+                }
+            }
+            if (is_new) {
+                break;
+            }
+        }
+        m.speed = random_int(5, 20, i);
+        m.x = coordinate.x;
+        m.y = coordinate.y;
+        board[m.y][m.x].has_monster = 1;
+        board[m.y][m.x].monster = m;
+        printf("Made %dth monster; speed: %d, x: %d, y: %d\n", i, m.speed, m.x, m.y);
+        monsters[i] = m;
+    }
+}
+
 void print_non_tunneling_board() {
     printf("Printing non-tunneling board\n");
     for (int y = 0; y < HEIGHT; y++) {
@@ -635,6 +699,9 @@ void print_board() {
             if (y == player.y && x == player.x) {
                 printf("@");
             }
+            else if (board[y][x].has_monster == 1) {
+                printf("%%");
+            }
             else {
                 print_cell(board[y][x]);
             }
@@ -668,10 +735,10 @@ void dig_rooms(int number_of_rooms_to_dig) {
 void dig_room(int index, int recursive_iteration) {
     // The index + recusrive_iteration is just a way to gain variety in the
     // random number. The hope is that it makes the program run faster.
-    int start_x = random_int(0, WIDTH - MIN_ROOM_WIDTH - 1, index + recursive_iteration * 10);
-    int start_y = random_int(0, HEIGHT - MIN_ROOM_HEIGHT - 1, index + recursive_iteration / 10);
-    int room_height = random_int(MIN_ROOM_HEIGHT, MAX_ROOM_HEIGHT, index + recursive_iteration - 5000);
-    int room_width = random_int(MIN_ROOM_WIDTH, MAX_ROOM_WIDTH, index + recursive_iteration + 5000);
+    int start_x = random_int(1, WIDTH - MIN_ROOM_WIDTH - 1, index + recursive_iteration);
+    int start_y = random_int(1, HEIGHT - MIN_ROOM_HEIGHT - 1, index + recursive_iteration);
+    int room_height = random_int(MIN_ROOM_HEIGHT, MAX_ROOM_HEIGHT, index + recursive_iteration);
+    int room_width = random_int(MIN_ROOM_WIDTH, MAX_ROOM_WIDTH, index + recursive_iteration);
     int end_y = start_y + room_height;
     if (end_y >= HEIGHT - 1) {
         end_y = HEIGHT - 2;
@@ -730,6 +797,8 @@ void add_rooms_to_board() {
     Board_Cell cell;
     cell.type = TYPE_ROOM;
     cell.hardness = ROOM;
+    cell.has_monster = 0;
+    cell.has_player = 0;
     for(int i = 0; i < NUMBER_OF_ROOMS; i++) {
         struct Room room = rooms[i];
         for (int y = room.start_y; y <= room.end_y; y++) {
@@ -787,6 +856,8 @@ void connect_rooms_at_indexes(int index1, int index2) {
         Board_Cell corridor_cell;
         corridor_cell.type = TYPE_CORRIDOR;
         corridor_cell.hardness = CORRIDOR;
+        corridor_cell.has_monster = 0;
+        corridor_cell.has_player = 0;
         corridor_cell.x = cur_x;
         corridor_cell.y = cur_y;
         board[cur_y][cur_x] = corridor_cell;
