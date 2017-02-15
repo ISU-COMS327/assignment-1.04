@@ -7,6 +7,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <math.h>
+
 #include "priority_queue.h"
 
 #define HEIGHT 105
@@ -64,6 +65,7 @@ struct Room * rooms;
 struct Monster * monsters;
 struct Coordinate player;
 char * RLG_DIRECTORY;
+Queue * game_queue;
 
 int DO_SAVE = 0;
 int DO_LOAD = 0;
@@ -97,6 +99,7 @@ int room_is_valid_at_index(int index);
 void add_rooms_to_board();
 void dig_cooridors();
 void connect_rooms_at_indexes(int index1, int index2);
+struct Monster get_monster(struct Coordinate coord);
 
 int main(int argc, char *args[]) {
     int player_x = -1;
@@ -169,12 +172,38 @@ int main(int argc, char *args[]) {
         dig_rooms(NUMBER_OF_ROOMS);
         dig_cooridors();
     }
+    game_queue = create_new_queue(NUMBER_OF_MONSTERS + 1);
     place_player();
     set_placeable_areas();
     set_non_tunneling_distance_to_player();
     set_tunneling_distance_to_player();
     generate_monsters();
     printf("Player location: (%d, %d) (x, y)\n", player.x, player.y);
+    int count = 0;
+    while(game_queue->length) {
+        Node min = extract_min(game_queue);
+        int speed;
+        if (min.coord.x == player.x && min.coord.y == player.y) {
+            speed = 10;
+            printf("Moving player character at (%d, %d)\n", min.coord.x, min.coord.y);
+        }
+        else {
+            struct Monster monster = get_monster(min.coord);
+            speed = monster.speed;
+            printf("Moving monster character at (%d, %d), speed %d\n", min.coord.x, min.coord.y, speed);
+        }
+        int i = 0;
+        while (i < game_queue->length) {
+            game_queue->nodes[i].priority --;
+            i++;
+        }
+        insert_with_priority(game_queue, min.coord, (1000/speed));
+        count ++;
+    //    usleep(83333);
+        if (count > 500) {
+            break;
+        }
+    }
 
     print_board();
     //print_non_tunneling_board();
@@ -389,8 +418,11 @@ void place_player() {
         int y = random_int(room.start_y, room.end_y, 500);
         player.x = x;
         player.y = y;
-
     }
+    struct Coordinate coord;
+    coord.x = player.x;
+    coord.y = player.y;
+    insert_with_priority(game_queue, coord, 1000/10);
 }
 
 void set_placeable_areas() {
@@ -647,6 +679,7 @@ void generate_monsters() {
         board[m.y][m.x].monster = m;
         printf("Made %dth monster; speed: %d, x: %d, y: %d\n", i, m.speed, m.x, m.y);
         monsters[i] = m;
+        insert_with_priority(game_queue, coordinate, 1000/m.speed);
     }
 }
 
@@ -871,4 +904,18 @@ void connect_rooms_at_indexes(int index1, int index2) {
             break;
         }
     }
+}
+
+struct Monster get_monster(struct Coordinate coord) {
+    struct Monster monster;
+    monster.x = 0;
+    monster.y = 0;
+    for (int i = 0; i < NUMBER_OF_MONSTERS; i++) {
+        struct Monster m = monsters[i];
+        if (m.x == coord.x && m.y == coord.y) {
+            monster = m;
+            break;
+        }
+    }
+    return monster;
 }

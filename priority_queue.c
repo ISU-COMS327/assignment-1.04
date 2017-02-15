@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <math.h>
 #include <stdint.h>
 
 struct Coordinate {
@@ -34,6 +35,7 @@ void insert_with_priority(Queue *q, struct Coordinate coord, int priority) {
         return;
     }
     int i;
+    int added = 0;
     for (i = 0; i < q->length; i++) {
         Node existing_node = q->nodes[i];
         if (priority <= existing_node.priority) {
@@ -42,8 +44,12 @@ void insert_with_priority(Queue *q, struct Coordinate coord, int priority) {
                 q->nodes[j+1] = node_to_shift;
             }
             q->nodes[i] = node;
+            added = 1;
             break;
         }
+    }
+    if (!added) {
+        q->nodes[q->length] = node;
     }
     q->length ++;
 }
