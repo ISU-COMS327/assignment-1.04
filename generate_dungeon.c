@@ -21,6 +21,7 @@
 #define DEFAULT_MAX_ROOM_WIDTH 15
 #define MIN_ROOM_HEIGHT 5
 #define DEFAULT_MAX_ROOM_HEIGHT 10
+#define DEFAULT_NUMBER_OF_MONSTERS 5
 
 static char * TYPE_ROOM = "room";
 static char * TYPE_CORRIDOR = "corridor";
@@ -47,6 +48,13 @@ struct Room {
     uint8_t end_y;
 };
 
+struct Monster {
+    uint8_t x;
+    uint8_t y;
+    uint8_t decimal_type;
+    uint8_t speed;
+};
+
 Board_Cell board[HEIGHT][WIDTH];
 struct Room * rooms;
 struct Coordinate player;
@@ -58,6 +66,7 @@ int SHOW_HELP = 0;
 int NUMBER_OF_ROOMS = MIN_NUMBER_OF_ROOMS;
 int MAX_ROOM_WIDTH = DEFAULT_MAX_ROOM_WIDTH;
 int MAX_ROOM_HEIGHT = DEFAULT_MAX_ROOM_HEIGHT;
+int NUMBER_OF_MONSTERS = DEFAULT_NUMBER_OF_MONSTERS;
 
 void print_usage();
 void make_rlg_directory();
@@ -70,6 +79,7 @@ void save_board();
 void place_player();
 void set_tunneling_distance_to_player();
 void set_non_tunneling_distance_to_player();
+void generate_monsters();
 void print_non_tunneling_board();
 void print_tunneling_board();
 void print_board();
@@ -88,6 +98,7 @@ int main(int argc, char *args[]) {
         {"save", no_argument, &DO_SAVE, 1},
         {"load", no_argument, &DO_LOAD, 1},
         {"rooms", required_argument, 0, 'r'},
+        {"nummon", required_argument, 0, 'm'},
         {"player_x", required_argument, 0, 'x'},
         {"player_y", required_argument, 0, 'y'},
         {"help", no_argument, &SHOW_HELP, 'h'},
@@ -98,6 +109,13 @@ int main(int argc, char *args[]) {
         switch(c) {
             case 'r':
                 NUMBER_OF_ROOMS = atoi(optarg);
+                break;
+            case 'm':
+                NUMBER_OF_MONSTERS =  atoi(optarg);
+                if (NUMBER_OF_MONSTERS < 1) {
+                    NUMBER_OF_MONSTERS = DEFAULT_NUMBER_OF_MONSTERS;
+                    printf("Number of monsters cannot be less than 1\n");
+                }
                 break;
             case 'x':
                 player_x = atoi(optarg);
@@ -112,7 +130,6 @@ int main(int argc, char *args[]) {
                 break;
         }
     }
-
     if (SHOW_HELP) {
         print_usage();
         exit(0);
@@ -130,7 +147,7 @@ int main(int argc, char *args[]) {
     }
     player.x = player_x;
     player.y = player_y;
-    printf("Received Parameters: Save: %d, Load: %d, #Rooms: %d\n\n", DO_SAVE, DO_LOAD, NUMBER_OF_ROOMS);
+    printf("Received Parameters: Save: %d, Load: %d, #Rooms: %d, #NumMon: %d\n\n", DO_SAVE, DO_LOAD, NUMBER_OF_ROOMS, NUMBER_OF_MONSTERS);
     update_number_of_rooms();
     initialize_board();
     make_rlg_directory();
