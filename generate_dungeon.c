@@ -178,34 +178,63 @@ int main(int argc, char *args[]) {
     set_non_tunneling_distance_to_player();
     set_tunneling_distance_to_player();
     generate_monsters();
+    print_board();
     printf("Player location: (%d, %d) (x, y)\n", player.x, player.y);
-    int count = 0;
+    int count = 1;
     while(game_queue->length) {
         Node min = extract_min(game_queue);
         int speed;
         if (min.coord.x == player.x && min.coord.y == player.y) {
             speed = 10;
-            printf("Moving player character at (%d, %d)\n", min.coord.x, min.coord.y);
+            int new_x = player.x;
+            int new_y = player.y;
+            int max_x = player.x + 1;
+            if (player.x + 1 >= WIDTH - 1) {
+                    max_x = player.x;
+            }
+            int min_x = player. x - 1;
+            if (min_x <= 1) {
+                min_x = player.x;
+            }
+            int min_y = player.y - 1;
+            if (min_y <= 1) {
+                min_y = player.y;
+            }
+            int max_y = player.y + 1;
+            if (max_y >= WIDTH - 1) {
+                max_y = player.y;
+            }
+            int local_counter = 0;
+            while(1) {
+                new_x = random_int(min_x, max_x, local_counter);
+                new_y = random_int(min_y, max_y, local_counter);
+                if (player.x == new_x && player.y == new_y) {
+                    continue;
+                }
+                if (board[new_y][new_x].hardness == 0) {
+                    break;
+                }
+            }
+            player.x = new_x;
+            player.y = new_y;
+            min.coord.x = new_x;
+            min.coord.y = new_y;
+            //printf("Moving player character at (%d, %d), pri: %d\n", min.coord.x, min.coord.y, min.priority);
+            print_board();
         }
         else {
             struct Monster monster = get_monster(min.coord);
             speed = monster.speed;
-            printf("Moving monster character at (%d, %d), speed %d\n", min.coord.x, min.coord.y, speed);
+            //printf("Moving monster character at (%d, %d), pri: %d, speed %d\n", min.coord.x, min.coord.y, min.priority, speed);
         }
-        int i = 0;
-        while (i < game_queue->length) {
-            game_queue->nodes[i].priority --;
-            i++;
-        }
-        insert_with_priority(game_queue, min.coord, (1000/speed));
+        insert_with_priority(game_queue, min.coord, (1000/speed) + min.priority);
         count ++;
-    //    usleep(83333);
+        usleep(833333);
         if (count > 500) {
             break;
         }
     }
 
-    print_board();
     //print_non_tunneling_board();
     //print_tunneling_board();
 
@@ -672,12 +701,24 @@ void generate_monsters() {
                 break;
             }
         }
-        m.speed = random_int(5, 20, i);
+        if (i == 0) {
+            m.speed = 15;
+        }
+        else if (i == 1) {
+            m.speed = 8;
+        }
+        else if (i == 2) {
+            m.speed = 6;
+        }
+        else {
+            m.speed = random_int(5, 20, i);
+        }
         m.x = coordinate.x;
         m.y = coordinate.y;
+        m.decimal_type = random_int(0, 16, i + 1);
         board[m.y][m.x].has_monster = 1;
         board[m.y][m.x].monster = m;
-        printf("Made %dth monster; speed: %d, x: %d, y: %d\n", i, m.speed, m.x, m.y);
+        printf("Made %dth monster;x: %d, y: %d, ability: %d, speed: %d\n", i, m.x, m.y, m.decimal_type, m.speed);
         monsters[i] = m;
         insert_with_priority(game_queue, coordinate, 1000/m.speed);
     }
