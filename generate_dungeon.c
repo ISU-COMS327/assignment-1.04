@@ -99,7 +99,9 @@ int room_is_valid_at_index(int index);
 void add_rooms_to_board();
 void dig_cooridors();
 void connect_rooms_at_indexes(int index1, int index2);
-struct Monster get_monster(struct Coordinate coord);
+int get_monster_index(struct Coordinate coord);
+void move_player();
+void move_monster_at_index(int index);
 
 int main(int argc, char *args[]) {
     int player_x = -1;
@@ -186,50 +188,25 @@ int main(int argc, char *args[]) {
         int speed;
         if (min.coord.x == player.x && min.coord.y == player.y) {
             speed = 10;
-            int new_x = player.x;
-            int new_y = player.y;
-            int max_x = player.x + 1;
-            if (player.x + 1 >= WIDTH - 1) {
-                    max_x = player.x;
-            }
-            int min_x = player. x - 1;
-            if (min_x <= 1) {
-                min_x = player.x;
-            }
-            int min_y = player.y - 1;
-            if (min_y <= 1) {
-                min_y = player.y;
-            }
-            int max_y = player.y + 1;
-            if (max_y >= WIDTH - 1) {
-                max_y = player.y;
-            }
-            int local_counter = 0;
-            while(1) {
-                new_x = random_int(min_x, max_x, local_counter);
-                new_y = random_int(min_y, max_y, local_counter);
-                if (player.x == new_x && player.y == new_y) {
-                    continue;
-                }
-                if (board[new_y][new_x].hardness == 0) {
-                    break;
-                }
-            }
-            player.x = new_x;
-            player.y = new_y;
-            min.coord.x = new_x;
-            min.coord.y = new_y;
+            move_player();
+            min.coord.x = player.x;
+            min.coord.y = player.y;
             //printf("Moving player character at (%d, %d), pri: %d\n", min.coord.x, min.coord.y, min.priority);
-            print_board();
         }
         else {
-            struct Monster monster = get_monster(min.coord);
+            int monster_index = get_monster_index(min.coord);
+            move_monster_at_index(monster_index);
+            struct Monster monster = monsters[monster_index];
+            printf("Got monster with ability: %d\n", monster.decimal_type);
             speed = monster.speed;
+            min.coord.x = monster.x;
+            min.coord.y = monster.y;
             //printf("Moving monster character at (%d, %d), pri: %d, speed %d\n", min.coord.x, min.coord.y, min.priority, speed);
         }
+        print_board();
         insert_with_priority(game_queue, min.coord, (1000/speed) + min.priority);
         count ++;
-        usleep(833333);
+        usleep(8333);
         if (count > 500) {
             break;
         }
@@ -401,13 +378,13 @@ int random_int(int min_num, int max_num, int add_to_seed) {
 void initialize_board() {
     Board_Cell cell;
     cell.type = TYPE_ROCK;
-    cell.hardness = ROCK;
     cell.has_monster = 0;
     cell.has_player = 0;
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
             cell.x = x;
             cell.y = y;
+            cell.hardness = random_int(1, 254, x + y);
             board[y][x] = cell;
         }
     }
@@ -702,10 +679,12 @@ void generate_monsters() {
             }
         }
         if (i == 0) {
-            m.speed = 15;
+            m.speed = 19;
+            m.decimal_type = 2;
         }
         else if (i == 1) {
-            m.speed = 8;
+            m.speed = 20;
+            m.decimal_type = 6;
         }
         else if (i == 2) {
             m.speed = 6;
@@ -715,7 +694,7 @@ void generate_monsters() {
         }
         m.x = coordinate.x;
         m.y = coordinate.y;
-        m.decimal_type = random_int(0, 16, i + 1);
+        //m.decimal_type = random_int(0, 15, i + 1);
         board[m.y][m.x].has_monster = 1;
         board[m.y][m.x].monster = m;
         printf("Made %dth monster;x: %d, y: %d, ability: %d, speed: %d\n", i, m.x, m.y, m.decimal_type, m.speed);
@@ -947,16 +926,156 @@ void connect_rooms_at_indexes(int index1, int index2) {
     }
 }
 
-struct Monster get_monster(struct Coordinate coord) {
-    struct Monster monster;
-    monster.x = 0;
-    monster.y = 0;
+int get_monster_index(struct Coordinate coord) {
+    int index = -1;
     for (int i = 0; i < NUMBER_OF_MONSTERS; i++) {
         struct Monster m = monsters[i];
         if (m.x == coord.x && m.y == coord.y) {
-            monster = m;
+            index = i;
             break;
         }
     }
-    return monster;
+    return index;
+}
+
+void move_player() {
+    int new_x = player.x;
+    int new_y = player.y;
+    int max_x = player.x + 1;
+    if (player.x + 1 >= WIDTH - 1) {
+            max_x = player.x;
+    }
+    int min_x = player. x - 1;
+    if (min_x <= 1) {
+        min_x = player.x;
+    }
+    int min_y = player.y - 1;
+    if (min_y <= 1) {
+        min_y = player.y;
+    }
+    int max_y = player.y + 1;
+    if (max_y >= WIDTH - 1) {
+        max_y = player.y;
+    }
+    int local_counter = 0;
+    while(1) {
+        new_x = random_int(min_x, max_x, local_counter);
+        new_y = random_int(min_y, max_y, local_counter);
+        if (player.x == new_x && player.y == new_y) {
+            continue;
+        }
+        if (board[new_y][new_x].hardness == 0) {
+            break;
+        }
+    }
+    player.x = new_x;
+    player.y = new_y;
+}
+
+Board_Cell * get_surrounding_cells(struct Coordinate c) {
+    Board_Cell * cells = malloc(sizeof(Board_Cell) * 8);
+    cells[0] = board[c.y + 1][c.x];
+    cells[1] = board[c.y + 1][c.x - 1];
+    cells[2] = board[c.y + 1][c.x + 1];
+    cells[3] = board[c.y - 1][c.x];
+    cells[4] = board[c.y - 1][c.x + 1];
+    cells[5] = board[c.y - 1][c.x - 1];
+    cells[6] = board[c.y][c.x + 1];
+    cells[7] = board[c.y][c.x - 1];
+    return cells;
+}
+
+Board_Cell get_cell_on_tunneling_path(struct Coordinate c) {
+    Board_Cell *cells = get_surrounding_cells(c);
+    Board_Cell cell = board[c.y][c.x];
+    int min = cell.tunneling_distance;
+    for (int i = 0; i < 8; i++) {
+        Board_Cell my_cell = cells[i];
+        if (my_cell.tunneling_distance < min) {
+            cell = my_cell;
+            min = my_cell.tunneling_distance;
+        }
+    }
+    return cell;
+}
+
+
+Board_Cell get_cell_on_non_tunneling_path(struct Coordinate c) {
+    Board_Cell *cells = get_surrounding_cells(c);
+    Board_Cell cell = board[c.y][c.x];
+    int min = cell.non_tunneling_distance;
+    for (int i = 0; i < 8; i++) {
+        Board_Cell my_cell = cells[i];
+        if (my_cell.non_tunneling_distance < min) {
+            cell = my_cell;
+            min = my_cell.non_tunneling_distance;
+        }
+    }
+    return cell;
+}
+
+void move_monster_at_index(int index) {
+    struct Monster monster = monsters[index];
+    Board_Cell cell = board[monster.y][monster.x];
+    struct Coordinate coord;
+    coord.x = monster.x;
+    coord.y = monster.y;
+    board[coord.y][coord.x].has_monster = 0;
+    switch(monster.decimal_type) {
+        case 0: // nothing
+            break;
+        case 1: // intelligent
+            break;
+        case 2: // telepathic
+            set_non_tunneling_distance_to_player();
+            cell = get_cell_on_non_tunneling_path(coord);
+            printf("Received cell: %d, %d\n", cell.x, cell.y);
+            monsters[index].x = cell.x;
+            monsters[index].y = cell.y;
+            break;
+        case 3: // telepathic + intelligent
+            break;
+        case 4: // tunneling
+            break;
+        case 5: // tunneling + intelligent
+            break;
+        case 6: // tunneling + telepathic
+            set_tunneling_distance_to_player();
+            cell = get_cell_on_tunneling_path(coord);
+            if (cell.hardness > 0) {
+                board[cell.y][cell.x].hardness -= 85;
+                if (board[cell.y][cell.x].hardness <= 0) {
+                    board[cell.y][cell.x].hardness = 0;
+                    board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                }
+                else {
+                    cell = board[monster.y][monster.x];
+                }
+            }
+            monsters[index].x = cell.x;
+            monsters[index].y = cell.y;
+            break;
+        case 7: // tunneling + telepathic + intelligent
+            break;
+        case 8: // erratic
+            break;
+        case 9: // erratic + intelligent
+            break;
+        case 10: // erratic + telepathic
+            break;
+        case 11: // erratic + intelligent + telepathic
+            break;
+        case 12: // erratic + tunneling
+            break;
+        case 13: // erratic + tunneling + intelligent
+            break;
+        case 14: // erratic + tunneling + telepathic
+            break;
+        case 15: // erratic + tunneling + telepathic + intelligent
+            break;
+        default:
+            printf("Invalid decimal type, %d\n", monster.decimal_type);
+            break;
+    }
+    board[monsters[index].y][monsters[index].x].has_monster = 1;
 }
