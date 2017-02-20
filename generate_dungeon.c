@@ -32,7 +32,13 @@ struct Monster {
     uint8_t x;
     uint8_t y;
     uint8_t decimal_type;
+    struct Coordinate last_known_player_location;
     uint8_t speed;
+};
+
+struct Available_Coords {
+    struct Coordinate * coords;
+    int length;
 };
 
 typedef struct {
@@ -67,6 +73,7 @@ struct Coordinate player;
 char * RLG_DIRECTORY;
 Queue * game_queue;
 
+int PLAYER_IS_ALIVE = 1;
 int DO_SAVE = 0;
 int DO_LOAD = 0;
 int SHOW_HELP = 0;
@@ -102,6 +109,7 @@ void connect_rooms_at_indexes(int index1, int index2);
 int get_monster_index(struct Coordinate coord);
 void move_player();
 void move_monster_at_index(int index);
+void kill_player_or_monster_at(struct Coordinate coord);
 
 int main(int argc, char *args[]) {
     int player_x = -1;
@@ -182,8 +190,8 @@ int main(int argc, char *args[]) {
     generate_monsters();
     print_board();
     printf("Player location: (%d, %d) (x, y)\n", player.x, player.y);
-    int count = 1;
-    while(game_queue->length) {
+    int count = 0;
+    while(NUMBER_OF_MONSTERS && PLAYER_IS_ALIVE) {
         Node min = extract_min(game_queue);
         int speed;
         if (min.coord.x == player.x && min.coord.y == player.y) {
@@ -191,25 +199,32 @@ int main(int argc, char *args[]) {
             move_player();
             min.coord.x = player.x;
             min.coord.y = player.y;
+            print_board();
+            usleep(8333);
+            set_non_tunneling_distance_to_player();
+            set_tunneling_distance_to_player();
             //printf("Moving player character at (%d, %d), pri: %d\n", min.coord.x, min.coord.y, min.priority);
         }
         else {
             int monster_index = get_monster_index(min.coord);
+            if (monster_index == -1) {
+                continue;
+            }
             move_monster_at_index(monster_index);
             struct Monster monster = monsters[monster_index];
-            printf("Got monster with ability: %d\n", monster.decimal_type);
             speed = monster.speed;
             min.coord.x = monster.x;
             min.coord.y = monster.y;
-            //printf("Moving monster character at (%d, %d), pri: %d, speed %d\n", min.coord.x, min.coord.y, min.priority, speed);
         }
-        print_board();
-        insert_with_priority(game_queue, min.coord, (1000/speed) + min.priority);
         count ++;
-        usleep(8333);
-        if (count > 500) {
-            break;
-        }
+        insert_with_priority(game_queue, min.coord, (1000/speed) + min.priority);
+    }
+
+    if (!PLAYER_IS_ALIVE) {
+        printf("You lost. The monsters killed you\n");
+    }
+    else if(!NUMBER_OF_MONSTERS) {
+        printf("You won, killing all the monsters\n");
     }
 
     //print_non_tunneling_board();
@@ -662,6 +677,9 @@ struct Coordinate get_random_board_location(int seed) {
 
 void generate_monsters() {
     monsters = malloc(sizeof(struct Monster) * NUMBER_OF_MONSTERS);
+    struct Coordinate last_known_player_location;
+    last_known_player_location.x = 0;
+    last_known_player_location.y = 0;
     for (int i = 0; i < NUMBER_OF_MONSTERS; i++) {
         struct Monster m;
         struct Coordinate coordinate;
@@ -678,23 +696,11 @@ void generate_monsters() {
                 break;
             }
         }
-        if (i == 0) {
-            m.speed = 19;
-            m.decimal_type = 2;
-        }
-        else if (i == 1) {
-            m.speed = 20;
-            m.decimal_type = 6;
-        }
-        else if (i == 2) {
-            m.speed = 6;
-        }
-        else {
-            m.speed = random_int(5, 20, i);
-        }
+        m.speed = random_int(5, 20, i);
         m.x = coordinate.x;
         m.y = coordinate.y;
-        //m.decimal_type = random_int(0, 15, i + 1);
+        m.last_known_player_location = last_known_player_location;
+        m.decimal_type = random_int(0, 15, i + 1);
         board[m.y][m.x].has_monster = 1;
         board[m.y][m.x].monster = m;
         printf("Made %dth monster;x: %d, y: %d, ability: %d, speed: %d\n", i, m.x, m.y, m.decimal_type, m.speed);
@@ -749,11 +755,15 @@ void print_tunneling_board() {
 void print_board() {
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
-            if (y == player.y && x == player.x) {
+            if (PLAYER_IS_ALIVE && y == player.y && x == player.x) {
                 printf("@");
             }
             else if (board[y][x].has_monster == 1) {
-                printf("%%");
+                struct Coordinate coord;
+                coord.x = x;
+                coord.y = y;
+                int index = get_monster_index(coord);
+                printf("%x", monsters[index].decimal_type);
             }
             else {
                 print_cell(board[y][x]);
@@ -938,38 +948,132 @@ int get_monster_index(struct Coordinate coord) {
     return index;
 }
 
-void move_player() {
-    int new_x = player.x;
-    int new_y = player.y;
-    int max_x = player.x + 1;
-    if (player.x + 1 >= WIDTH - 1) {
-            max_x = player.x;
+struct Available_Coords get_non_tunneling_available_coords_for(struct Coordinate coord) {
+    int x = coord.x;
+    int y = coord.y;
+    struct Available_Coords available_coords;
+    struct Coordinate new_coord;
+    int size = 0;
+    available_coords.length = 0;
+    available_coords.coords = malloc(sizeof(struct Coordinate) * 8);
+    if (board[y - 1][x].hardness == 0) {
+        new_coord.y = y - 1;
+        new_coord.x = x;
+        available_coords.coords[size] = new_coord;
+        size++;
     }
-    int min_x = player. x - 1;
+    if (board[y - 1][x - 1].hardness == 0) {
+        new_coord.y = y - 1;
+        new_coord.x = x - 1;
+        available_coords.coords[size] = new_coord;
+        size++;
+    }
+    if(board[y - 1][x + 1].hardness == 0) {
+        new_coord.y = y - 1;
+        new_coord.x = x + 1;
+        available_coords.coords[size] = new_coord;
+        size ++;
+    }
+    if(board[y + 1][x].hardness == 0) {
+        new_coord.y = y + 1;
+        new_coord.x = x;
+        available_coords.coords[size] = new_coord;
+        size ++;
+    }
+    if(board[y + 1][x - 1].hardness == 0) {
+        new_coord.y = y + 1;
+        new_coord.x = x - 1;
+        available_coords.coords[size] = new_coord;
+        size ++;
+    }
+    if(board[y + 1][x + 1].hardness == 0) {
+        new_coord.y = y + 1;
+        new_coord.x = x + 1;
+        available_coords.coords[size] = new_coord;
+        size++;
+    }
+    if(board[y][x - 1].hardness == 0) {
+        new_coord.y = y;
+        new_coord.x = x - 1;
+        available_coords.coords[size] = new_coord;
+        size ++;
+    }
+    if (board[y][x + 1].hardness == 0) {
+        new_coord.y = y;
+        new_coord.x = x + 1;
+        available_coords.coords[size] = new_coord;
+        size++;
+    }
+    available_coords.length = size;
+    return available_coords;
+}
+
+struct Coordinate get_random_new_non_tunneling_location(struct Coordinate coord) {
+    struct Coordinate new_coord;
+    struct Available_Coords coords = get_non_tunneling_available_coords_for(coord);
+    int new_coord_index = random_int(0, coords.length - 1, coord.x + coord.y);
+    struct Coordinate temp_coord = coords.coords[new_coord_index];
+    new_coord.x = temp_coord.x;
+    new_coord.y = temp_coord.y;
+    return new_coord;
+}
+
+struct Coordinate get_random_new_tunneling_location(struct Coordinate coord) {
+    struct Coordinate new_coord;
+    new_coord.x = coord.x;
+    new_coord.y = coord.y;
+    int max_x = coord.x + 1;
+    if (coord.x + 1 >= WIDTH - 1) {
+        max_x = coord.x;
+    }
+    int min_x = coord. x - 1;
     if (min_x <= 1) {
-        min_x = player.x;
+        min_x = coord.x;
     }
-    int min_y = player.y - 1;
+    int min_y = coord.y - 1;
     if (min_y <= 1) {
-        min_y = player.y;
+        min_y = coord.y;
     }
-    int max_y = player.y + 1;
+    int max_y = coord.y + 1;
     if (max_y >= WIDTH - 1) {
-        max_y = player.y;
+        max_y = coord.y;
     }
     int local_counter = 0;
     while(1) {
-        new_x = random_int(min_x, max_x, local_counter);
-        new_y = random_int(min_y, max_y, local_counter);
-        if (player.x == new_x && player.y == new_y) {
+        new_coord.x = random_int(min_x, max_x, local_counter);
+        new_coord.y = random_int(min_y, max_y, local_counter);
+        if (coord.x == new_coord.x && coord.y == new_coord.y) {
             continue;
         }
-        if (board[new_y][new_x].hardness == 0) {
+        if (board[new_coord.y][new_coord.x].hardness != IMMUTABLE_ROCK) {
+            break;
+        }
+        local_counter ++;
+    }
+    return new_coord;
+}
+
+
+void move_player() {
+    int found_monster = 0;
+    struct Coordinate new_coord;
+    struct Available_Coords coords = get_non_tunneling_available_coords_for(player);
+    for (int i = 0; i < coords.length; i++) {
+        struct Coordinate current_coord = coords.coords[i];
+        if (board[current_coord.y][current_coord.x].has_monster) {
+            found_monster = 1;
+            new_coord = current_coord;
             break;
         }
     }
-    player.x = new_x;
-    player.y = new_y;
+    if (!found_monster) {
+        new_coord = get_random_new_non_tunneling_location(player);
+    }
+    if (new_coord.x != player.x || new_coord.y != player.y) {
+        kill_player_or_monster_at(new_coord);
+    }
+    player.x = new_coord.x;
+    player.y = new_coord.y;
 }
 
 Board_Cell * get_surrounding_cells(struct Coordinate c) {
@@ -988,12 +1092,10 @@ Board_Cell * get_surrounding_cells(struct Coordinate c) {
 Board_Cell get_cell_on_tunneling_path(struct Coordinate c) {
     Board_Cell *cells = get_surrounding_cells(c);
     Board_Cell cell = board[c.y][c.x];
-    int min = cell.tunneling_distance;
     for (int i = 0; i < 8; i++) {
-        Board_Cell my_cell = cells[i];
-        if (my_cell.tunneling_distance < min) {
-            cell = my_cell;
-            min = my_cell.tunneling_distance;
+        Board_Cell current_cell = cells[i];
+        if (current_cell.tunneling_distance < cell.tunneling_distance) {
+            cell = current_cell;
         }
     }
     return cell;
@@ -1014,68 +1116,409 @@ Board_Cell get_cell_on_non_tunneling_path(struct Coordinate c) {
     return cell;
 }
 
+struct Room get_room_player_is_in() {
+    struct Room room;
+    room.start_x = 0;
+    room.end_x = 0;
+    room.start_y = 0;
+    room.end_y = 0;
+    for (int i = 0; i < NUMBER_OF_ROOMS; i++) {
+        struct Room current_room = rooms[i];
+        if (current_room.start_x <= player.x && player.x <= current_room.end_x) {
+            if (current_room.start_y <= player.y && player.y <= current_room.end_y) {
+                room = current_room;
+                break;
+            }
+        }
+    }
+    return room;
+}
+
+int monster_is_in_same_room_as_player(int index) {
+    struct Monster m = monsters[index];
+    struct Room room = get_room_player_is_in();
+    if (room.start_x <= m.x && m.x <= room.end_x) {
+        if (room.start_y <= m.y && m.y <= room.end_y) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int should_do_erratic_behavior(int index) {
+    return random_int(0, 1, index);
+}
+
+int monster_knows_last_player_location(int index) {
+    struct Monster m = monsters[index];
+    struct Coordinate last_known_player_location = m.last_known_player_location;
+    return last_known_player_location.x != 0 && last_known_player_location.y != 0;
+}
+
+struct Coordinate get_straight_path_to(int index, struct Coordinate coord) {
+    struct Monster m = monsters[index];
+    struct Coordinate new_coord;
+    if (m.x == coord.x) {
+        new_coord.x = m.x;
+    }
+    else if (m.x < coord.x) {
+        new_coord.x = m.x + 1;
+    }
+    else {
+        new_coord.x = m.x - 1;
+    }
+
+    if (m.y == coord.y) {
+        new_coord.y = m.y;
+    }
+    else if (m.y < coord.y) {
+        new_coord.y = m.y + 1;
+    }
+    else {
+        new_coord.y = m.y - 1;
+    }
+
+    return new_coord;
+}
+
+void kill_monster_at(int index) {
+    struct Monster m = monsters[index];
+    board[m.y][m.x].has_monster = 0;
+    for (int i = index + 1; i < NUMBER_OF_MONSTERS; i++) {
+        monsters[i - 1] = monsters[i];
+    }
+    NUMBER_OF_MONSTERS --;
+}
+
+void kill_player_or_monster_at(struct Coordinate coord) {
+    int index = get_monster_index(coord);
+    if (index >= 0) {
+        printf("Monster with ability %d was killed!\n", monsters[index].decimal_type);
+        kill_monster_at(index);
+    }
+    if (player.x == coord.x && player.y == coord.y) {
+        PLAYER_IS_ALIVE = 0;
+        printf("The player was killed!\n");
+    }
+}
+
 void move_monster_at_index(int index) {
     struct Monster monster = monsters[index];
     Board_Cell cell = board[monster.y][monster.x];
-    struct Coordinate coord;
-    coord.x = monster.x;
-    coord.y = monster.y;
-    board[coord.y][coord.x].has_monster = 0;
+    struct Coordinate monster_coord;
+    monster_coord.x = monster.x;
+    monster_coord.y = monster.y;
+    struct Coordinate new_coord;
+    new_coord.x = monster.x;
+    new_coord.y = monster.y;
+    board[new_coord.y][new_coord.x].has_monster = 0;
     switch(monster.decimal_type) {
         case 0: // nothing
+            if (monster_is_in_same_room_as_player(index)) {
+                new_coord = get_straight_path_to(index, player);
+            }
+            else {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
             break;
         case 1: // intelligent
+            if (monster_is_in_same_room_as_player(index)) {
+                monsters[index].last_known_player_location = player;
+                new_coord = get_straight_path_to(index, player);
+            }
+            else if(monster_knows_last_player_location(index)) {
+                new_coord = get_straight_path_to(index, monster.last_known_player_location);
+                if (new_coord.x == monster.last_known_player_location.x && new_coord.y == monster.last_known_player_location.y) {
+                    monsters[index].last_known_player_location.x = 0;
+                    monsters[index].last_known_player_location.y = 0;
+                }
+            }
+            else {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
             break;
         case 2: // telepathic
-            set_non_tunneling_distance_to_player();
-            cell = get_cell_on_non_tunneling_path(coord);
-            printf("Received cell: %d, %d\n", cell.x, cell.y);
-            monsters[index].x = cell.x;
-            monsters[index].y = cell.y;
+            new_coord = get_straight_path_to(index, player);
+            if (board[new_coord.y][new_coord.x].hardness > 0) {
+                new_coord.x = monster_coord.x;
+                new_coord.y = monster_coord.y;
+            }
             break;
         case 3: // telepathic + intelligent
+            cell = get_cell_on_non_tunneling_path(new_coord);
+            new_coord.x = cell.x;
+            new_coord.y = cell.y;
             break;
         case 4: // tunneling
-            break;
-        case 5: // tunneling + intelligent
-            break;
-        case 6: // tunneling + telepathic
-            set_tunneling_distance_to_player();
-            cell = get_cell_on_tunneling_path(coord);
+            if (monster_is_in_same_room_as_player(index)) {
+                new_coord = get_straight_path_to(index, player);
+            }
+            else {
+                new_coord = get_random_new_tunneling_location(monster_coord);
+            }
+            cell = board[new_coord.y][new_coord.x];
             if (cell.hardness > 0) {
                 board[cell.y][cell.x].hardness -= 85;
                 if (board[cell.y][cell.x].hardness <= 0) {
                     board[cell.y][cell.x].hardness = 0;
                     board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                    set_non_tunneling_distance_to_player();
                 }
                 else {
-                    cell = board[monster.y][monster.x];
+                    new_coord.x = monster.x;
+                    new_coord.y = monster.y;
+                }
+                set_tunneling_distance_to_player();
+            }
+            break;
+        case 5: // tunneling + intelligent
+            if (monster_is_in_same_room_as_player(index)) {
+                monsters[index].last_known_player_location = player;
+                new_coord = get_straight_path_to(index, player);
+            }
+            else if(monster_knows_last_player_location(index)) {
+                new_coord = get_straight_path_to(index, monster.last_known_player_location);
+                if (new_coord.x == monster.last_known_player_location.x && new_coord.y == monster.last_known_player_location.y) {
+                    monsters[index].last_known_player_location.x = 0;
+                    monsters[index].last_known_player_location.y = 0;
                 }
             }
-            monsters[index].x = cell.x;
-            monsters[index].y = cell.y;
+            else {
+                new_coord = get_random_new_tunneling_location(monster_coord);
+                cell = board[new_coord.y][new_coord.x];
+                if (cell.hardness > 0) {
+                    board[cell.y][cell.x].hardness -= 85;
+                    if (board[cell.y][cell.x].hardness <= 0) {
+                        board[cell.y][cell.x].hardness = 0;
+                        board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                        set_non_tunneling_distance_to_player();
+                    }
+                    else {
+                        new_coord.x = monster.x;
+                        new_coord.y = monster.y;
+                    }
+                    set_tunneling_distance_to_player();
+                }
+            }
+            break;
+        case 6: // tunneling + telepathic
+            new_coord = get_straight_path_to(index, player);
+            cell = board[new_coord.y][new_coord.x];
+            if (cell.hardness > 0) {
+                board[cell.y][cell.x].hardness -= 85;
+                if (board[cell.y][cell.x].hardness <= 0) {
+                    board[cell.y][cell.x].hardness = 0;
+                    board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                    set_non_tunneling_distance_to_player();
+                }
+                else {
+                    new_coord.x = monster.x;
+                    new_coord.y = monster.y;
+                }
+                set_tunneling_distance_to_player();
+            }
             break;
         case 7: // tunneling + telepathic + intelligent
+            cell = get_cell_on_tunneling_path(new_coord);
+            new_coord.x = cell.x;
+            new_coord.y = cell.y;
+            if (cell.hardness > 0) {
+                board[cell.y][cell.x].hardness -= 85;
+                if (board[cell.y][cell.x].hardness <= 0) {
+                    board[cell.y][cell.x].hardness = 0;
+                    board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                    set_non_tunneling_distance_to_player();
+                }
+                else {
+                    new_coord.x = monster.x;
+                    new_coord.y = monster.y;
+                }
+                set_tunneling_distance_to_player();
+            }
             break;
         case 8: // erratic
+            if (should_do_erratic_behavior(index)) {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
+            else {
+                if (monster_is_in_same_room_as_player(index)) {
+                    new_coord = get_straight_path_to(index, player);
+                }
+                else {
+                    new_coord = get_random_new_non_tunneling_location(monster_coord);
+                }
+            }
             break;
         case 9: // erratic + intelligent
+            if (should_do_erratic_behavior(index)) {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
+            else {
+                if (monster_is_in_same_room_as_player(index)) {
+                    monsters[index].last_known_player_location = player;
+                    new_coord = get_straight_path_to(index, player);
+                }
+                else if(monster_knows_last_player_location(index)) {
+                    new_coord = get_straight_path_to(index, monster.last_known_player_location);
+                    if (new_coord.x == monster.last_known_player_location.x && new_coord.y == monster.last_known_player_location.y) {
+                        monsters[index].last_known_player_location.x = 0;
+                        monsters[index].last_known_player_location.y = 0;
+                    }
+                }
+                else {
+                    new_coord = get_random_new_non_tunneling_location(monster_coord);
+                }
+            }
             break;
         case 10: // erratic + telepathic
+            if (should_do_erratic_behavior(index)) {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
+            else {
+                new_coord = get_straight_path_to(index, player);
+                if (board[new_coord.y][new_coord.x].hardness != 0) {
+                    new_coord.x = monster.x;
+                    new_coord.y = monster.y;
+                }
+            }
             break;
         case 11: // erratic + intelligent + telepathic
+            if (should_do_erratic_behavior(index)) {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
+            else {
+                new_coord = get_straight_path_to(index, player);
+                cell = board[new_coord.y][new_coord.x];
+                if (cell.hardness > 0) {
+                    board[cell.y][cell.x].hardness -= 85;
+                    if (board[cell.y][cell.x].hardness <= 0) {
+                        board[cell.y][cell.x].hardness = 0;
+                        board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                        set_non_tunneling_distance_to_player();
+                    }
+                    else {
+                        new_coord.x = monster.x;
+                        new_coord.y = monster.y;
+                    }
+                    set_tunneling_distance_to_player();
+                }
+            }
             break;
         case 12: // erratic + tunneling
+            if (should_do_erratic_behavior(index)) {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
+            else {
+                if (monster_is_in_same_room_as_player(index)) {
+                    new_coord = get_straight_path_to(index, player);
+                }
+                else {
+                    new_coord = get_random_new_tunneling_location(monster_coord);
+                }
+                cell = board[new_coord.y][new_coord.x];
+                if (cell.hardness > 0) {
+                    board[cell.y][cell.x].hardness -= 85;
+                    if (board[cell.y][cell.x].hardness <= 0) {
+                        board[cell.y][cell.x].hardness = 0;
+                        board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                        set_non_tunneling_distance_to_player();
+                    }
+                    else {
+                        new_coord.x = monster.x;
+                        new_coord.y = monster.y;
+                    }
+                    set_tunneling_distance_to_player();
+                }
+            }
             break;
         case 13: // erratic + tunneling + intelligent
+            if (should_do_erratic_behavior(index)) {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
+            else {
+                if (monster_is_in_same_room_as_player(index)) {
+                    monsters[index].last_known_player_location = player;
+                    new_coord = get_straight_path_to(index, player);
+                }
+                else if(monster_knows_last_player_location(index)) {
+                    new_coord = get_straight_path_to(index, monster.last_known_player_location);
+                    if (new_coord.x == monster.last_known_player_location.x && new_coord.y == monster.last_known_player_location.y) {
+                        monsters[index].last_known_player_location.x = 0;
+                        monsters[index].last_known_player_location.y = 0;
+                    }
+                }
+                else {
+                    new_coord = get_random_new_tunneling_location(monster_coord);
+                    cell = board[new_coord.y][new_coord.x];
+                    if (cell.hardness > 0) {
+                        board[cell.y][cell.x].hardness -= 85;
+                        if (board[cell.y][cell.x].hardness <= 0) {
+                            board[cell.y][cell.x].hardness = 0;
+                            board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                            set_non_tunneling_distance_to_player();
+                        }
+                        else {
+                            new_coord.x = monster.x;
+                            new_coord.y = monster.y;
+                        }
+                        set_tunneling_distance_to_player();
+                    }
+                }
+            }
             break;
         case 14: // erratic + tunneling + telepathic
+            if (should_do_erratic_behavior(index)) {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
+            else {
+                new_coord = get_straight_path_to(index, player);
+                cell = board[new_coord.y][new_coord.x];
+                if (cell.hardness > 0) {
+                    board[cell.y][cell.x].hardness -= 85;
+                    if (board[cell.y][cell.x].hardness <= 0) {
+                        board[cell.y][cell.x].hardness = 0;
+                        board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                        set_non_tunneling_distance_to_player();
+                    }
+                    else {
+                        new_coord.x = monster.x;
+                        new_coord.y = monster.y;
+                    }
+                    set_tunneling_distance_to_player();
+                }
+            }
             break;
         case 15: // erratic + tunneling + telepathic + intelligent
+            if (should_do_erratic_behavior(index)) {
+                new_coord = get_random_new_non_tunneling_location(monster_coord);
+            }
+            else {
+                cell = get_cell_on_tunneling_path(new_coord);
+                new_coord.x = cell.x;
+                new_coord.y = cell.y;
+                if (cell.hardness > 0) {
+                    board[cell.y][cell.x].hardness -= 85;
+                    if (board[cell.y][cell.x].hardness <= 0) {
+                        board[cell.y][cell.x].hardness = 0;
+                        board[cell.y][cell.x].type = TYPE_CORRIDOR;
+                        set_non_tunneling_distance_to_player();
+                    }
+                    else {
+                        new_coord.x = monster.x;
+                        new_coord.y = monster.y;
+                    }
+                    set_tunneling_distance_to_player();
+                }
+            }
             break;
         default:
             printf("Invalid decimal type, %d\n", monster.decimal_type);
             break;
     }
-    board[monsters[index].y][monsters[index].x].has_monster = 1;
+    if (new_coord.x != monster.x || new_coord.y != monster.y) {
+        kill_player_or_monster_at(new_coord);
+    }
+    monsters[index].x = new_coord.x;
+    monsters[index].y = new_coord.y;
+    board[new_coord.y][new_coord.x].has_monster = 1;
 }
