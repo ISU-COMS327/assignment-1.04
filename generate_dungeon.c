@@ -200,10 +200,9 @@ int main(int argc, char *args[]) {
             min.coord.x = player.x;
             min.coord.y = player.y;
             print_board();
-            usleep(8333);
+            usleep(83333);
             set_non_tunneling_distance_to_player();
             set_tunneling_distance_to_player();
-            //printf("Moving player character at (%d, %d), pri: %d\n", min.coord.x, min.coord.y, min.priority);
         }
         else {
             int monster_index = get_monster_index(min.coord);
