@@ -375,7 +375,7 @@ void load_board() {
 }
 
 void print_usage() {
-    printf("usage: generate_dungeon [--save] [--load] [--rooms=<number of rooms>]\n");
+    printf("usage: generate_dungeon [--save] [--load] [--rooms=<number of rooms>] [--player_x=<player x position>] [--player_y=<player y position>] [--nummon=<number of monsters>]\n");
 }
 
 int random_int(int min_num, int max_num, int add_to_seed) {
