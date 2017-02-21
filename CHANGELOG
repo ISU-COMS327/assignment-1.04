@@ -1,0 +1,95 @@
+commit 45a0ef7
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Tue Feb 14 09:55:38 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Tue Feb 14 09:55:38 2017 -0600
+
+    initialize repo
+
+commit 91238c9
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Tue Feb 14 18:22:36 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Tue Feb 14 18:22:36 2017 -0600
+
+    Accept --nummon argument
+
+commit 76bcdbf
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Tue Feb 14 19:21:41 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Tue Feb 14 19:21:41 2017 -0600
+
+    Randomly place monsters and improve random number generator
+
+commit c2f1bc7
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Tue Feb 14 19:21:57 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Tue Feb 14 19:21:57 2017 -0600
+
+    Forgot to make clean
+
+commit 4526aee
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Wed Feb 15 17:54:39 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Wed Feb 15 17:54:39 2017 -0600
+
+    Created event queue. Correctly inserting events, but need a better way to process turns
+
+commit f4cad52
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Thu Feb 16 09:39:45 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Thu Feb 16 09:39:45 2017 -0600
+
+    Successfully made event queue and simulated player movement
+
+commit 29564be
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Thu Feb 16 13:42:24 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Thu Feb 16 13:42:24 2017 -0600
+
+    Got telepathic and tunneling telepathic monsters working
+
+commit d080c34 (origin/master)
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Mon Feb 20 17:43:33 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Mon Feb 20 17:43:33 2017 -0600
+
+    Built out all monster types
+
+commit c9b412f
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Tue Feb 21 09:03:00 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Tue Feb 21 09:03:00 2017 -0600
+
+    Only print on players turn
+
+commit ebc88e8
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Tue Feb 21 09:06:37 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Tue Feb 21 09:06:37 2017 -0600
+
+    Update README
+
+commit 574f27c
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Tue Feb 21 09:08:29 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Tue Feb 21 09:08:29 2017 -0600
+
+    Update usage
+
+commit b2fbbff (HEAD -> master)
+Author:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+AuthorDate: Tue Feb 21 09:08:37 2017 -0600
+Commit:     Joseph McGovern <joseph.mcgovern@webfilings.com>
+CommitDate: Tue Feb 21 09:08:37 2017 -0600
+
+    Forgot to call make clean before committing
